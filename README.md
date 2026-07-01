@@ -2,7 +2,7 @@
 
 A [doom-style fire effect](https://fabiensanglard.net/doom_fire_psx/) in Rust, rewritten for looks.
 
-![fire](screenshot.png)
+![fire](screenshot.gif)
 
 The simulation runs at the classic 320×200 resolution and is displayed in a
 960×600 window via a bilinear 3× upscale of the heat field. On top of the
