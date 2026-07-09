@@ -197,34 +197,45 @@ fn splat(buf: &mut [u16], idx: usize, heat: u16) {
 
 const SNAP_FRAMES: [u32; 5] = [150, 240, 320, 324, 328];
 
-fn write_ppm(path: &str, buf: &[u32], w: usize, h: usize) {
+fn write_ppm(path: &str, buf: &[u32], w: usize, h: usize) -> std::io::Result<()> {
     let mut bytes = Vec::with_capacity(w * h * 3 + 20);
     bytes.extend_from_slice(format!("P6\n{w} {h}\n255\n").as_bytes());
     for &px in buf {
         bytes.extend_from_slice(&[(px >> 16) as u8, (px >> 8) as u8, px as u8]);
     }
-    if let Err(e) = std::fs::write(path, bytes) {
-        eprintln!("snapshot {path} failed: {e}");
-    }
+    std::fs::write(path, bytes)
 }
 
 fn main() {
     let snapshot_dir = std::env::var("FIRE_SNAPSHOT").ok();
+    if let Some(dir) = &snapshot_dir
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        eprintln!("snapshot: create {dir}: {e}");
+        std::process::exit(1);
+    }
 
-    let mut window = Window::new(
-        "Fire  —  ESC to quit",
-        OW,
-        OH,
-        WindowOptions {
-            scale: Scale::X1,
-            scale_mode: ScaleMode::Stretch,
-            resize: true,
-            ..WindowOptions::default()
-        },
-    )
-    .expect("Could not open window");
-
-    window.set_target_fps(if snapshot_dir.is_some() { 0 } else { 60 });
+    // Snapshot mode is headless: no window, so it works without a display
+    // (CI, SSH, remote builds). Interactive mode opens the usual window.
+    let mut window = match &snapshot_dir {
+        None => {
+            let mut w = Window::new(
+                "Fire  —  ESC to quit",
+                OW,
+                OH,
+                WindowOptions {
+                    scale: Scale::X1,
+                    scale_mode: ScaleMode::Stretch,
+                    resize: true,
+                    ..WindowOptions::default()
+                },
+            )
+            .expect("Could not open window");
+            w.set_target_fps(60);
+            Some(w)
+        }
+        Some(_) => None,
+    };
 
     let mut rng = Rng(0xDEAD_BEEF_CAFE_F00D);
     let palette = make_palette();
@@ -254,7 +265,13 @@ fn main() {
     let mut phase_a = 0f32;
     let mut phase_b = 0f32;
 
-    while window.is_open() && !window.is_key_down(Key::Escape) {
+    loop {
+        if let Some(w) = &window
+            && (!w.is_open() || w.is_key_down(Key::Escape))
+        {
+            break;
+        }
+
         frame = frame.wrapping_add(1);
 
         // Slow irregular sway, ±1: two incommensurate sines (~6.3s and ~1.6s).
@@ -490,11 +507,17 @@ fn main() {
             }
         }
 
-        window.update_with_buffer(&screen, OW, OH).unwrap();
+        if let Some(w) = window.as_mut() {
+            w.update_with_buffer(&screen, OW, OH).unwrap();
+        }
 
         if let Some(dir) = &snapshot_dir {
             if SNAP_FRAMES.contains(&frame) {
-                write_ppm(&format!("{dir}/fire_{frame:04}.ppm"), &screen, OW, OH);
+                let path = format!("{dir}/fire_{frame:04}.ppm");
+                if let Err(e) = write_ppm(&path, &screen, OW, OH) {
+                    eprintln!("snapshot {path} failed: {e}");
+                    std::process::exit(1);
+                }
             }
             if frame >= SNAP_FRAMES[SNAP_FRAMES.len() - 1] {
                 break;
