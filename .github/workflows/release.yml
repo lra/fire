@@ -2,13 +2,57 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.version.outputs.should_release }}
+      version: ${{ steps.version.outputs.version }}
+      prev_tag: ${{ steps.version.outputs.prev_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Detect version bump
+        id: version
+        run: |
+          set -euo pipefail
+
+          VERSION=$(cargo metadata --format-version=1 --no-deps \
+            | jq -r '.packages[] | select(.name == "fire") | .version')
+
+          if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+            echo "Failed to parse package version from cargo metadata" >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Package version: $VERSION"
+
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: ${PREV_TAG:-<none>}"
+
+          if git rev-parse "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${VERSION} already exists — skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag v${VERSION} does not exist — will release."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -20,7 +64,7 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-15-intel
           - target: aarch64-apple-darwin
             os: macos-latest
           - target: x86_64-pc-windows-msvc
@@ -28,7 +72,7 @@ jobs:
           - target: aarch64-pc-windows-msvc
             os: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -39,34 +83,72 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
-        run: tar -czf fire-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release fire
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          ARCHIVE="fire-${VERSION}-${TARGET}.tar.gz"
+          tar -czf "$ARCHIVE" -C "target/${TARGET}/release" fire
+          ls -la "$ARCHIVE"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: Compress-Archive -Path target/${{ matrix.target }}/release/fire.exe -DestinationPath fire-${{ matrix.target }}.zip
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        shell: pwsh
+        run: |
+          $archive = "fire-$env:VERSION-$env:TARGET.zip"
+          Compress-Archive -Path "target/$env:TARGET/release/fire.exe" -DestinationPath $archive
+          Get-Item $archive
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
-          name: fire-${{ matrix.target }}
-          path: fire-${{ matrix.target }}.*
+          name: fire-${{ needs.prepare.outputs.version }}-${{ matrix.target }}
+          path: fire-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.*
           if-no-files-found: error
 
-  release:
-    needs: build
+  publish:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
-          path: dist
+          path: artifacts
+          pattern: fire-${{ needs.prepare.outputs.version }}-*
           merge-multiple: true
 
-      - name: Create release
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PREV_TAG: ${{ needs.prepare.outputs.prev_tag }}
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          assets=(artifacts/*)
+          if [[ ${#assets[@]} -eq 0 ]]; then
+            echo "No release archives found under artifacts/" >&2
+            find artifacts -type f || true
+            exit 1
+          fi
+
+          notes_args=(--generate-notes)
+          if [[ -n "${PREV_TAG}" ]]; then
+            notes_args+=(--notes-start-tag "${PREV_TAG}")
+          fi
+
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --target "${GITHUB_SHA}" \
+            "${notes_args[@]}" \
+            "${assets[@]}"
