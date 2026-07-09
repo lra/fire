@@ -27,6 +27,22 @@ cargo run --release
 
 Press <kbd>Esc</kbd> to quit.
 
+## Prebuilt binaries
+
+When the `version` in `Cargo.toml` is bumped on `master`, CI publishes a
+[GitHub Release](https://github.com/lra/fire/releases) with archives for:
+
+- Linux x86_64 and ARM64
+- macOS ARM64 and x86_64
+- Windows x86_64 and ARM64
+
+Each archive is a single `fire` binary (`.exe` on Windows). Release notes are
+generated automatically from commits and pull requests since the previous tag.
+
+To cut a release: bump `version` in `Cargo.toml` (and commit the lockfile if
+dependencies changed), merge to `master`. CI tags `v<version>` and uploads the
+archives once that tag does not already exist.
+
 ## Snapshot mode
 
 Set `FIRE_SNAPSHOT=<dir>` to render a few frames to PPM files in `<dir>` and
