@@ -113,8 +113,36 @@ jobs:
           path: fire-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.*
           if-no-files-found: error
 
+  build-web:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build and package
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --target wasm32-unknown-unknown --lib
+          cp target/wasm32-unknown-unknown/release/fire.wasm web/
+          ARCHIVE="fire-${VERSION}-web.zip"
+          (cd web && zip "../${ARCHIVE}" index.html fire.wasm)
+          ls -la "$ARCHIVE"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fire-${{ needs.prepare.outputs.version }}-web
+          path: fire-${{ needs.prepare.outputs.version }}-web.zip
+          if-no-files-found: error
+
   publish:
-    needs: [prepare, build]
+    needs: [prepare, build, build-web]
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:

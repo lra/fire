@@ -35,8 +35,10 @@ When the `version` in `Cargo.toml` is bumped on `master`, CI publishes a
 - Linux x86_64 and ARM64
 - macOS ARM64 and x86_64
 - Windows x86_64 and ARM64
+- Web: `fire-<version>-web.zip` with `index.html` + `fire.wasm`, ready to
+  serve from any static host
 
-Each archive is a single `fire` binary (`.exe` on Windows). Release notes are
+Each native archive is a single `fire` binary (`.exe` on Windows). Release notes are
 generated automatically from commits and pull requests since the previous tag.
 
 To cut a release: bump `version` in `Cargo.toml` (and commit the lockfile if
