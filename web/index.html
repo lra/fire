@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; }
+  body { display: grid; place-items: center; }
+  canvas { max-width: 100vw; max-height: 100vh; cursor: pointer; }
+</style>
+<canvas id="c" title="Click for fullscreen"></canvas>
+<script type="module">
+  const { instance } = await WebAssembly.instantiateStreaming(fetch("fire.wasm"));
+  const { memory, fire_new, fire_frame, fire_width, fire_height } = instance.exports;
+
+  const w = fire_width(), h = fire_height();
+  const canvas = document.getElementById("c");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.onclick = () => canvas.requestFullscreen();
+  const ctx = canvas.getContext("2d");
+
+  const fire = fire_new();
+  (function loop() {
+    // Re-view memory each frame: the buffer detaches if wasm memory grows.
+    const ptr = fire_frame(fire);
+    const rgba = new Uint8ClampedArray(memory.buffer, ptr, w * h * 4);
+    ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+    requestAnimationFrame(loop);
+  })();
+</script>
