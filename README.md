@@ -43,6 +43,22 @@ To cut a release: bump `version` in `Cargo.toml` (and commit the lockfile if
 dependencies changed), merge to `master`. CI tags `v<version>` and uploads the
 archives once that tag does not already exist.
 
+## Web (wasm)
+
+The renderer also builds for the browser — no wasm-bindgen or npm, just a
+`cdylib` blitted to a canvas by `web/index.html`:
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo build --release --target wasm32-unknown-unknown --lib
+cp target/wasm32-unknown-unknown/release/fire.wasm web/
+python3 -m http.server -d web
+```
+
+Then open <http://localhost:8000>. Click the canvas for fullscreen.
+(`--lib` matters: without it cargo also builds the native binary, which
+doesn't exist for wasm.)
+
 ## Snapshot mode
 
 Set `FIRE_SNAPSHOT=<dir>` to render a few frames to PPM files in `<dir>` and
