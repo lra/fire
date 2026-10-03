@@ -1,6 +1,6 @@
 [package]
 name = "fire"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 
 # rlib for the native bin, cdylib for the wasm build (see web/).
@@ -8,7 +8,7 @@ edition = "2024"
 crate-type = ["rlib", "cdylib"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-minifb = "0.28"
+minifb = "0.29"
 
 # The per-output-pixel upscale/bloom path needs optimizations even for
 # plain `cargo run` to hold 60 fps.

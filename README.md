@@ -17,7 +17,13 @@ classic bottom-up heat cascade it adds:
 
 ## Install
 
-Grab a binary for your platform from the
+With Homebrew:
+
+```sh
+brew install lra/tap/fire
+```
+
+Or grab a binary for your platform from the
 [latest release](https://github.com/lra/fire/releases/latest), or build from
 source:
 
@@ -43,7 +49,8 @@ generated automatically from commits and pull requests since the previous tag.
 
 To cut a release: bump `version` in `Cargo.toml` (and commit the lockfile if
 dependencies changed), merge to `master`. CI tags `v<version>` and uploads the
-archives once that tag does not already exist.
+archives once that tag does not already exist, then bumps the
+[Homebrew formula](https://github.com/lra/homebrew-tap/blob/master/Formula/fire.rb).
 
 ## Web (wasm)
 

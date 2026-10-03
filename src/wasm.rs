@@ -21,7 +21,7 @@ pub extern "C" fn fire_new() -> *mut WasmFire {
 pub extern "C" fn fire_frame(p: *mut WasmFire) -> *const u8 {
     let wf = unsafe { &mut *p };
     let screen = wf.fire.step();
-    for (px, out) in screen.iter().zip(wf.rgba.chunks_exact_mut(4)) {
+    for (px, out) in screen.iter().zip(wf.rgba.as_chunks_mut::<4>().0) {
         out[0] = (px >> 16) as u8;
         out[1] = (px >> 8) as u8;
         out[2] = *px as u8;
