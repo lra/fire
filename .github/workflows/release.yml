@@ -180,3 +180,30 @@ jobs:
             --target "${GITHUB_SHA}" \
             "${notes_args[@]}" \
             "${assets[@]}"
+
+      - uses: actions/create-github-app-token@v3
+        id: tap-token
+        with:
+          client-id: ${{ vars.TAP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
+          owner: lra
+          repositories: homebrew-tap
+
+      - name: Bump Homebrew formula
+        env:
+          GH_TOKEN: ${{ steps.tap-token.outputs.token }}
+          APP_SLUG: ${{ steps.tap-token.outputs.app-slug }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/lra/fire/archive/refs/tags/v${VERSION}.tar.gz"
+          SHA=$(curl -fsSL "$URL" | sha256sum | cut -d' ' -f1)
+          gh auth setup-git
+          gh repo clone lra/homebrew-tap tap
+          cd tap
+          sed -i -E "s|^(  url ).*|\1\"${URL}\"|; s|^(  sha256 ).*|\1\"${SHA}\"|" Formula/fire.rb
+          BOT="${APP_SLUG}[bot]"
+          git config user.name "$BOT"
+          git config user.email "$(gh api "/users/${BOT}" --jq .id)+${BOT}@users.noreply.github.com"
+          git commit -am "fire ${VERSION}"
+          git push
